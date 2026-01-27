@@ -1,0 +1,9 @@
+pyproject.toml
+mytool/__init__.py
+mytool/cli.py
+mytool/storage.py
+mytool.egg-info/PKG-INFO
+mytool.egg-info/SOURCES.txt
+mytool.egg-info/dependency_links.txt
+mytool.egg-info/entry_points.txt
+mytool.egg-info/top_level.txt
