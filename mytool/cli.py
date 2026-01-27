@@ -73,7 +73,7 @@ def kanban_select():
         max_rows = max(len(tasks_by_status(s)) for s in STATUSES) or 1
 
         # help line at the top
-        lines.append(("", "[a] add  [space] →  [z] ←  [r] remove  [enter] save  [esc] cancel\n\n"))
+        lines.append(("", "[a] add  [x] →  [z] ←  [r] remove  [s] save  [esc] cancel\n\n"))
 
         # header
         headers = []
@@ -176,7 +176,7 @@ def kanban_select():
         run_in_terminal(add_new_task)
         event.app.invalidate()
 
-    @kb.add("enter")
+    @kb.add("s")
     def _accept(event):
         event.app.exit(result=True)
 
