@@ -1,4 +1,5 @@
 import typer
+
 from typing import Dict, Optional
 
 from mytool.storage import load_tasks, save_tasks
@@ -17,45 +18,6 @@ from prompt_toolkit.application import run_in_terminal
 console = Console()
 app = typer.Typer(help="A simple todo CLI")
 
-
-def add_task(text: str):
-    tasks = load_tasks()
-    tasks.append({"text": text, "done": False, "status": "todo"})
-    save_tasks(tasks)
-    console.print(f"[bold green]✔ Added:[/] {text}")
-
-
-def list_tasks():
-    tasks = load_tasks()
-    if not tasks:
-        console.print("[bold yellow]No tasks yet![/]")
-        raise typer.Exit()
-
-    table = Table(title="📋 Todo List")
-    table.add_column("#", style="cyan", justify="right")
-    table.add_column("Status", style="green")
-    table.add_column("Task", style="white")
-
-    for i, task in enumerate(tasks, start=1):
-        status = "[green]✔[/]" if task.get("done") else "[red]✗[/]"
-        style = "dim" if task.get("done") else None
-        table.add_row(str(i), status, task.get("text", ""), style=style)
-
-    console.print(table)
-
-
-def mark_done(number: int):
-    tasks = load_tasks()
-    try:
-        tasks[number - 1]["done"] = True
-    except IndexError:
-        console.print("[bold red]✖ Invalid task number[/]")
-        raise typer.Exit(code=1)
-
-    save_tasks(tasks)
-    console.print("[bold green]✔ Task marked as done[/]")
-
-
 def kanban_select():
     tasks = load_tasks() or []  # allow empty board
     for t in tasks:
@@ -73,7 +35,7 @@ def kanban_select():
         max_rows = max(len(tasks_by_status(s)) for s in STATUSES) or 1
 
         # help line at the top
-        lines.append(("", "[a] add  [x] →  [z] ←  [r] remove  [s] save  [esc] cancel\n\n"))
+        lines.append(("", "[a] add  [x] →  [z] ←  [r] remove  [s] save  [esc] cancel  [space] inspect\n\n"))
 
         # header
         headers = []
@@ -88,7 +50,7 @@ def kanban_select():
                 col_tasks = tasks_by_status(status)
                 if row < len(col_tasks):
                     task = col_tasks[row]
-                    text_main = f"{task['text'][:16]:16}"
+                    text_main = f"{task['text'][:13]:13}..." if len(task['text']) > 16 else f"{task['text']:16}"
                 else:
                     text_main = " " * 16
 
@@ -153,6 +115,7 @@ def kanban_select():
         event.app.invalidate()
 
     @kb.add("r")
+    @kb.add("backspace")
     def _remove(event):
         nonlocal selected
         col_tasks = tasks_by_status(STATUSES[current_col])
@@ -166,22 +129,47 @@ def kanban_select():
     @kb.add("a")
     def _add(event):
         def get_task_text():
-            return input("New task text: ")
+            text = input("New task text: ")
+            description = input("New task description: ")
+            return text, description
 
         def add_new_task():
-            text = get_task_text()
-            if text.strip():
-                tasks.append({"text": text.strip(), "done": False, "status": "todo"})
+            text, description = get_task_text()
+            if text.strip() != "":
+                tasks.append({"text": text.strip(), "done": False, "status": STATUSES[current_col], "description": description.strip() if description.strip() != "" else None})
 
         run_in_terminal(add_new_task)
         event.app.invalidate()
+    
+    @kb.add("space")
+    @kb.add("i")
+    def _inspect(event):
+        nonlocal selected
+        col_tasks = tasks_by_status(STATUSES[current_col])
+        if not col_tasks:
+            return
+        task = col_tasks[selected]
+
+        def inspect_task():
+            console.print(f"\n[bold]Task Details[/]")
+            console.print(f"Text: {task['text']}")
+            console.print(f"Status: {task['status']}")
+            if 'description' in task and task['description'] is not None:
+                console.print(f"Description: {task['description']}\n") 
+            return input("Press Enter to continue...")
+
+        run_in_terminal(inspect_task)
+        event.app.invalidate()
 
     @kb.add("s")
+    @kb.add("enter")
     def _accept(event):
+        run_in_terminal(lambda: console.clear())
         event.app.exit(result=True)
 
     @kb.add("escape")
     def _cancel(event):
+        run_in_terminal(lambda: console.clear())
         event.app.exit(result=False)
 
     control = FormattedTextControl(
@@ -197,6 +185,7 @@ def kanban_select():
         key_bindings=kb,
         full_screen=True,
         style=Style.from_dict({"reverse": "reverse"}),
+        erase_when_done=True,
     )
 
     confirmed = app_tui.run()
@@ -205,27 +194,7 @@ def kanban_select():
         save_tasks(tasks)
         console.print("[bold green]✔ Tasks updated[/]")
     else:
-        console.print("[dim]Cancelled[/]")
-
-
-
-@app.command()
-def add(text: str):
-    """Add a new task"""
-    add_task(text)
-
-
-@app.command(name="list")
-def list():
-    """List tasks"""
-    list_tasks()
-
-
-@app.command()
-def done(number: int):
-    """Mark a task as done"""
-    mark_done(number)
-
+        console.print("[bold red]X Cancelled[/]")
 
 @app.command()
 def run():
