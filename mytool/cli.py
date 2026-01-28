@@ -168,6 +168,7 @@ def kanban_select():
         event.app.exit(result=True)
 
     @kb.add("escape")
+    @kb.add("q")
     def _cancel(event):
         run_in_terminal(lambda: console.clear())
         event.app.exit(result=False)
