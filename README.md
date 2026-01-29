@@ -4,9 +4,8 @@
 
     This project is a CLI todo list with a singel .json file as storage. The goal is to be able to use this CLI for kanban style todo-lists instead of relying on apps such as Notion or Trello and to have it handy in the terminal.
 
-***
 
 ## The Future
 
-    *Better styling
-    *Look into sqlite3 instead of .json for storage
+    - Better styling
+    - Look into sqlite3 instead of .json for storage
