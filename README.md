@@ -1,4 +1,6 @@
-# ToDo CLI
+ToDo CLI
+===
+
 ## Overviev
 ###### This project is an attempt at learning how to create a CLI on my own. 
 
