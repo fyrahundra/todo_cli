@@ -9,4 +9,4 @@
 ## The Future
 
     * Better styling
-    *
+    * Look into sqlite3 instead of .json for storage
