@@ -4,7 +4,7 @@ import os
 
 from typing import Dict, Optional
 
-from mytool.storage import load_tasks, save_tasks, set_data_file
+from mytool.storage import get_data_file, load_tasks, load_db_names, save_tasks, set_data_file
 
 from rich.console import Console
 from rich.table import Table
@@ -25,7 +25,7 @@ app = typer.Typer(help="A simple todo CLI")
 # Menus
 
 def main_menu():
-    OPTIONS = ["Manage Tasks", "Move Storage", "Exit"]
+    OPTIONS = ["Manage Tasks", "Manage Storage", "Exit"]
 
     current_selection = 0
 
@@ -58,10 +58,14 @@ def main_menu():
     def _enter(event):
         if OPTIONS[current_selection] == "Manage Tasks":
             event.app.exit(result="manage")
-        elif OPTIONS[current_selection] == "Move Storage":
-            event.app.exit(result="move_storage")
+        elif OPTIONS[current_selection] == "Manage Storage":
+            event.app.exit(result="manage_storage")
         else:
             event.app.exit(result="exit")
+    @kb.add("escape")
+    @kb.add("q")
+    def _escape(event):
+        event.app.exit(result="exit")
     
     app_tui = Application(
         layout=Layout(window),
@@ -75,20 +79,89 @@ def main_menu():
     
     if result == "manage":
         console.clear()
-        kanban_select()
-    elif result == "move_storage":
+        db_select()
+    elif result == "manage_storage":
         console.clear()
-        show_storage_path()
-        show_current_path()
-        new_path = console.input("Enter new storage file path: ")
-        move_storage(new_path)
-        main_menu()
+        storage_menu()
     elif result == "exit":
         console.clear()
         console.print("[bold green]Goodbye![/]")
 
-def kanban_select():
-    tasks = load_tasks() or []  # allow empty board
+def db_select():
+    db_names = load_db_names()
+    if not db_names:
+        console.print("[bold yellow]No boards found. Please create a new board.[/]")
+        db_name = console.input("Enter new board name: ")
+        create_db(db_name)
+        db_select()
+        return
+    
+    OPTIONS = db_names + ["Make new board", "Return to Main Menu"]
+
+    current_selection = 0
+
+    kb = KeyBindings()
+
+    control = FormattedTextControl(
+        lambda: [
+            ("", "Select a board:\n\n")
+        ] + [
+            ("reverse" if i == current_selection else "", f"  {option}  \n")
+            for i, option in enumerate(OPTIONS)
+        ],
+        focusable=True,
+        show_cursor=False
+    )
+
+    @kb.add("up")
+    def _up(event):
+        nonlocal current_selection
+        current_selection = max(0, current_selection - 1)
+        event.app.invalidate()
+    @kb.add("down")
+    def _down(event):
+        nonlocal current_selection
+        current_selection = min(len(OPTIONS) - 1, current_selection + 1)
+        event.app.invalidate()
+    @kb.add("enter")
+    def _enter(event):
+        if OPTIONS[current_selection] == "Return to Main Menu":
+            event.app.exit(result="return")
+        elif OPTIONS[current_selection] == "Make new board":
+            event.app.exit(result="make_new")
+        else:
+            event.app.exit(result=OPTIONS[current_selection])
+    @kb.add("escape")
+    @kb.add("q")
+    def _escape(event):
+        event.app.exit(result="return")
+    
+    window = Window(content=control)
+
+    app_tui = Application(
+        layout=Layout(window),
+        key_bindings=kb,
+        full_screen=True,
+        style=Style.from_dict({"reverse": "reverse"}),
+        erase_when_done=True,
+    )
+
+    result = app_tui.run()
+
+    if result == "return":
+        console.clear()
+        main_menu()
+    elif result == "make_new":
+        console.clear()
+        db_name = console.input("Enter new board name: ")
+        create_db(db_name)
+        db_select()
+    else:
+        console.clear()
+        kanban_select(result)
+
+def kanban_select(db_name: Optional[str] = None):
+    tasks = load_tasks(db_name) or []  # allow empty board
     for t in tasks:
         t.setdefault("status", "todo")  # ensure old tasks have a status
 
@@ -261,15 +334,15 @@ def kanban_select():
     confirmed = app_tui.run()
 
     if confirmed:
-        save_tasks(tasks)
+        save_tasks(tasks, db_name)
         console.print("[bold green]✔ Tasks updated[/]")
-        main_menu()
+        db_select()
     else:
         console.print("[bold red]X Cancelled[/]")
-        main_menu()
+        db_select()
 
-def sub_menu():
-    OPTIONS = ["Return to Main Menu"]
+def storage_menu():
+    OPTIONS = ["Show Storage Path", "Move Storage", "Return to Main Menu"]
 
     current_selection = 0
 
@@ -298,6 +371,15 @@ def sub_menu():
         event.app.invalidate()
     @kb.add("enter")
     def _enter(event):
+        if OPTIONS[current_selection] == "Show Storage Path":
+            event.app.exit(result="show_path")
+        elif OPTIONS[current_selection] == "Move Storage":
+            event.app.exit(result="move_storage")
+        else:
+            event.app.exit(result="return")
+    @kb.add("escape")
+    @kb.add("q")
+    def _escape(event):
         event.app.exit(result="return")
 
     window = Window(content=control)
@@ -312,7 +394,19 @@ def sub_menu():
 
     result = app_tui.run()
     
-    if result == "return":
+    if result == "show_path":
+        console.clear()
+        show_storage_path()
+        console.input("Press Enter to return to storage menu ...")
+        storage_menu()
+    elif result == "move_storage":
+        console.clear()
+        show_storage_path()
+        show_current_path()
+        new_path = console.input("Enter new storage file path: ")
+        move_storage(new_path)
+        storage_menu()
+    elif result == "return":
         console.clear()
         main_menu()
 
@@ -320,7 +414,7 @@ def sub_menu():
 
 def move_storage(newPath: str):
     """Move the storage file to a new location"""
-    standard_path = Path.home() / ".todo.json"
+    standard_path = get_data_file()
     new_path = Path(newPath).expanduser()
     
     # If new_path is a directory, append the filename
@@ -337,13 +431,34 @@ def move_storage(newPath: str):
 
 def show_storage_path():
     """Show the current storage file path"""
-    standard_path = Path.home() / ".todo.json"
+    standard_path = get_data_file()
     console.print(f"[bold blue]i Current storage file path: {standard_path}[/]")
 
 def show_current_path():
     """Show the current working directory"""
     cwd = Path.cwd()
     console.print(f"[bold blue]i Current working directory: {cwd}[/]")
+
+def create_db(db_name: str):
+    """Create a new set of data in the current data file"""
+    data_file = get_data_file()
+    if data_file.exists():
+        try:
+            content = json.loads(data_file.read_text())
+            if not isinstance(content, dict):
+                console.print(f"[bold red]X Existing data file is not in multiple database format.[/]")
+                return
+        except json.JSONDecodeError:
+            content = {}
+    else:
+        content = {}
+    if db_name in content:
+        console.print(f"[bold red]X Database '{db_name}' already exists.[/]")
+        return
+    content[db_name] = []
+    data_file.write_text(json.dumps(content, indent=2))
+    console.print(f"[bold green]✔ Database '{db_name}' created.[/]")
+
 
 # Commands
 
